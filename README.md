@@ -10,7 +10,6 @@ The exporter:
 ## Requirements
 
 - Python 3.10+
-- `meshcore-cli` (`meshcli`) installed and reachable
 - Linux host with `systemd` (for the recommended install path)
 
 ## Install (Recommended)
@@ -28,7 +27,9 @@ bash scripts/build_and_install_systemd.sh
 
 The script will:
 - build the executable with PyInstaller,
+- build a standalone `meshcli` executable with PyInstaller,
 - install the binary to `/opt/meshcore-prom-exporter/meshcore-prom-exporter`,
+- install `meshcli` to `/opt/meshcore-prom-exporter/meshcli`,
 - install the service file to `/etc/systemd/system/meshcore-prom-exporter.service`,
 - copy config template to `/etc/meshcore-prom-exporter/meshcore-prom-exporter.env` (if missing),
 - run `systemctl daemon-reload`.
@@ -47,6 +48,7 @@ sudo systemctl status meshcore-prom-exporter
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+python -m pip install meshcore-cli
 ```
 
 ## Build Executable (PyInstaller)
