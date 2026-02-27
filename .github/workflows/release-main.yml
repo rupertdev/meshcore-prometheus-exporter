@@ -1,0 +1,61 @@
+name: Release Main Build
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pip install meshcore-cli
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Build meshcore-prom-exporter binary
+        run: |
+          pyinstaller --clean --onefile --name meshcore-prom-exporter --paths src src/meshcore_prom_exporter/__main__.py
+
+      - name: Build meshcli binary
+        run: |
+          MESHCLI_ENTRY="$(python -c 'import meshcore_cli.meshcore_cli as m; print(m.__file__)')"
+          pyinstaller --clean --onefile --name meshcli "${MESHCLI_ENTRY}"
+
+      - name: Prepare release artifacts
+        run: |
+          mkdir -p release
+          cp dist/meshcore-prom-exporter release/
+          cp dist/meshcli release/
+          sha256sum release/meshcore-prom-exporter release/meshcli > release/SHA256SUMS.txt
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: main-${{ github.sha }}
+          name: Main build ${{ github.sha }}
+          body: |
+            Automated release built from push to `main`.
+            Commit: ${{ github.sha }}
+          generate_release_notes: true
+          files: |
+            release/meshcore-prom-exporter
+            release/meshcli
+            release/SHA256SUMS.txt
