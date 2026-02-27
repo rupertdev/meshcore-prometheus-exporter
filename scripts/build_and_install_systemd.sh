@@ -13,6 +13,7 @@ INSTALL_BIN="${INSTALL_PREFIX}/${APP_NAME}"
 SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
 CONFIG_DIR="${CONFIG_DIR:-/etc/meshcore-prom-exporter}"
 CONFIG_FILE="${CONFIG_DIR}/${APP_NAME}.env"
+WORK_DIR="${WORK_DIR:-/var/lib/meshcore-prom-exporter}"
 SUDO_BIN="${SUDO_BIN:-sudo}"
 
 if ! command -v pyinstaller >/dev/null 2>&1; then
@@ -36,6 +37,9 @@ fi
 echo "Installing executable to ${INSTALL_BIN}..."
 "${SUDO_BIN}" install -d "${INSTALL_PREFIX}"
 "${SUDO_BIN}" install -m 0755 "${DIST_BIN}" "${INSTALL_BIN}"
+
+echo "Ensuring working directory exists at ${WORK_DIR}..."
+"${SUDO_BIN}" install -d "${WORK_DIR}"
 
 echo "Installing systemd unit to ${SYSTEMD_DIR}/${APP_NAME}.service..."
 "${SUDO_BIN}" install -d "${SYSTEMD_DIR}"

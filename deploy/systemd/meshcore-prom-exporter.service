@@ -5,10 +5,8 @@ After=network-online.target
 
 [Service]
 Type=simple
-User=meshcore-exporter
-Group=meshcore-exporter
 EnvironmentFile=/etc/meshcore-prom-exporter/meshcore-prom-exporter.env
-WorkingDirectory=/var/lib/meshcore-prom-exporter
+WorkingDirectory=/opt/meshcore-prom-exporter
 ExecStart=/opt/meshcore-prom-exporter/meshcore-prom-exporter
 Restart=on-failure
 RestartSec=5

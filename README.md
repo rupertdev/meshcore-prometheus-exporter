@@ -145,10 +145,12 @@ Included files:
 - `deploy/systemd/meshcore-prom-exporter.env.example`
 - `scripts/build_and_install_systemd.sh` (build + install helper)
 
+The provided unit does not set `User`/`Group`, so systemd runs it as root by default.
+
 Manual install (if not using the helper script):
 
 ```bash
-sudo useradd --system --home /var/lib/meshcore-prom-exporter --create-home meshcore-exporter
+sudo mkdir -p /var/lib/meshcore-prom-exporter
 sudo mkdir -p /etc/meshcore-prom-exporter
 sudo mkdir -p /opt/meshcore-prom-exporter
 sudo cp dist/meshcore-prom-exporter /opt/meshcore-prom-exporter/meshcore-prom-exporter
@@ -212,6 +214,8 @@ Neighbor naming:
 - `--debug-meshcli` logs raw stdout/stderr and timings for each command.
 - `contacts` timeout warning means the subprocess hit `MESHCORE_CONTACTS_TIMEOUT_SECONDS`.
 - If `req_status` returns an error payload (for example `{"error":"Getting data"}`), exporter retries once after `MESHCORE_STATUS_ERROR_RETRY_SECONDS`.
+- `status=200/CHDIR` in `systemctl status` means `WorkingDirectory` does not exist for the unit.
+- `meshcore-prom-exporter: error: the following arguments are required: --target` means `MESHCORE_TARGET` is missing in `/etc/meshcore-prom-exporter/meshcore-prom-exporter.env`.
 
 ## Local SQLite schema
 
