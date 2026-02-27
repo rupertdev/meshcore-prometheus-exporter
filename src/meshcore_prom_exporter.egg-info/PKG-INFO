@@ -7,22 +7,23 @@ Description-Content-Type: text/markdown
 Requires-Dist: prometheus-client>=0.20.0
 Provides-Extra: dev
 Requires-Dist: pytest>=8.0.0; extra == "dev"
+Requires-Dist: pyinstaller>=6.0.0; extra == "dev"
 
 # meshcore-prom-exporter
 
-Prometheus exporter for meshcore telemetry, using `meshcore-cli` as the polling backend.
+Prometheus exporter for MeshCore nodes, using `meshcore-cli` as the polling backend.
 
-This first iteration:
-- invokes `meshcli -j` commands on a schedule (`req_telemetry` and `contacts`),
-- stores each poll snapshot in local SQLite,
-- exposes latest numeric telemetry values on `/metrics`.
+The exporter:
+- refreshes `contacts` on a configured interval and, per poll cycle, runs `req_status` then `req_neighbours`,
+- stores poll snapshots in SQLite,
+- exposes latest values on `/metrics`.
 
 ## Requirements
 
 - Python 3.10+
-- `meshcore-cli` installed and reachable as `meshcli` (or pass `--meshcli-bin`)
+- `meshcore-cli` (`meshcli`) installed and reachable
 
-## Install
+## Install (local)
 
 ```bash
 python -m venv .venv
@@ -30,7 +31,21 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-## Run
+## Build Executable (PyInstaller)
+
+Build a single-file executable:
+
+```bash
+pyinstaller --clean --onefile --name meshcore-prom-exporter --paths src src/meshcore_prom_exporter/__main__.py
+```
+
+Output binary:
+
+```text
+dist/meshcore-prom-exporter
+```
+
+## Run (local)
 
 Example using TCP to a companion node:
 
@@ -51,41 +66,138 @@ Metrics endpoint:
 http://localhost:9108/metrics
 ```
 
-## Environment variables
+## Configuration
 
-All CLI arguments have environment equivalents:
+Most runtime CLI flags have environment variable equivalents (`--once` is CLI-only):
 
-- `MESHCORE_CLI_BIN` (default: `meshcli`)
-- `MESHCORE_TARGET` (required if `--target` not set)
-- `MESHCORE_ARGS` (default: empty string)
-- `MESHCORE_TIMEOUT_SECONDS` (default: `20`)
-- `MESHCORE_DEVICE_PASSWORD` (fallback env: `MESHCORE_PASSWORD`)
-- `MESHCORE_LOGIN_TARGET` (optional, defaults to target)
-- `MESHCORE_POLL_INTERVAL_SECONDS` (default: `30`)
-- `MESHCORE_DB_PATH` (default: `./data/telemetry.db`)
-- `MESHCORE_LISTEN_ADDRESS` (default: `0.0.0.0`)
-- `MESHCORE_LISTEN_PORT` (default: `9108`)
-- `MESHCORE_LOG_LEVEL` (default: `INFO`)
+- `--meshcli-bin` / `MESHCORE_CLI_BIN` (default: `meshcli`)
+- `--target` / `MESHCORE_TARGET` (required if env not set)
+- `--meshcore-args` / `MESHCORE_ARGS` (default: empty)
+- `--timeout-seconds` / `MESHCORE_TIMEOUT_SECONDS` (default: `20`)
+- `--contacts-timeout-seconds` / `MESHCORE_CONTACTS_TIMEOUT_SECONDS` (default: `60`)
+- `--device-password` / `MESHCORE_DEVICE_PASSWORD` (fallback: `MESHCORE_PASSWORD`)
+- `--login-target` / `MESHCORE_LOGIN_TARGET` (default: target)
+- `--poll-interval-seconds` / `MESHCORE_POLL_INTERVAL_SECONDS` (default: `30`)
+- `--contacts-refresh-seconds` / `MESHCORE_CONTACTS_REFRESH_SECONDS` (default: `300`)
+- `--request-stagger-seconds` / `MESHCORE_REQUEST_STAGGER_SECONDS` (default: `2`)
+- `--status-error-retry-seconds` / `MESHCORE_STATUS_ERROR_RETRY_SECONDS` (default: `1`)
+- `--db-path` / `MESHCORE_DB_PATH` (default: `./data/telemetry.db`)
+- `--listen-address` / `MESHCORE_LISTEN_ADDRESS` (default: `0.0.0.0`)
+- `--listen-port` / `MESHCORE_LISTEN_PORT` (default: `9108`)
+- `--log-level` / `MESHCORE_LOG_LEVEL` (default: `INFO`)
+- `--debug-meshcli` / `MESHCORE_DEBUG_MESHCLI` (default: `false`)
 
-## Exported metrics
+Polling guidance:
+- Avoid aggressive polling. For most deployments, `--poll-interval-seconds 3600` (hourly) is frequent enough and reduces load/timeouts on MeshCore nodes.
 
-- `meshcore_poll_success{target}`
-- `meshcore_poll_duration_seconds{target}`
-- `meshcore_poll_timestamp_seconds{target}`
-- `meshcore_telemetry_snapshots_total{target}`
-- `meshcore_telemetry_value{target,key}`
-- `meshcore_battery_voltage_volts{target}`
-- `meshcore_battery_percent{target}`
-- `meshcore_contacts_total{target}`
-- `meshcore_neighbors_zero_hop_total{target}`
+## Docker
 
-`meshcore_telemetry_value` includes numeric and boolean values from telemetry payloads.
-Nested values are flattened into snake_case keys (for example `battery_voltage`).
+Build:
+
+```bash
+docker build -t meshcore-prom-exporter:latest .
+```
+
+Run:
+
+```bash
+docker run --rm -p 9108:9108 \
+  -e MESHCORE_TARGET="repeater01" \
+  -e MESHCORE_ARGS="-t 192.168.1.10 -p 5000" \
+  -e MESHCORE_DEVICE_PASSWORD="your-password" \
+  -e MESHCORE_DB_PATH="/data/telemetry.db" \
+  -v "$(pwd)/data:/data" \
+  meshcore-prom-exporter:latest
+```
+
+Notes:
+- The image includes both this exporter and `meshcore-cli`.
+- If you are using BLE/serial access from container, you may need host networking and device passthrough.
+
+## Grafana Dashboard
+
+- Included dashboard JSON: `dashboards/meshcore.json`
+- Import in Grafana: Dashboards -> New -> Import -> Upload JSON file
+- The dashboard expects a Prometheus datasource UID of `cf5zubsowsg00f`; update that UID in the JSON if your datasource uses a different one.
+
+## systemd
+
+Included files:
+- `deploy/systemd/meshcore-prom-exporter.service`
+- `deploy/systemd/meshcore-prom-exporter.env.example`
+
+Suggested install:
+
+```bash
+sudo useradd --system --home /var/lib/meshcore-prom-exporter --create-home meshcore-exporter
+sudo mkdir -p /etc/meshcore-prom-exporter
+sudo mkdir -p /opt/meshcore-prom-exporter
+sudo cp dist/meshcore-prom-exporter /opt/meshcore-prom-exporter/meshcore-prom-exporter
+sudo chmod 0755 /opt/meshcore-prom-exporter/meshcore-prom-exporter
+sudo cp deploy/systemd/meshcore-prom-exporter.env.example /etc/meshcore-prom-exporter/meshcore-prom-exporter.env
+sudo cp deploy/systemd/meshcore-prom-exporter.service /etc/systemd/system/meshcore-prom-exporter.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now meshcore-prom-exporter
+```
+
+After editing env values:
+
+```bash
+sudo systemctl restart meshcore-prom-exporter
+sudo systemctl status meshcore-prom-exporter
+```
+
+## Metric Sources
+
+| Metric | Labels | Source |
+|---|---|---|
+| `meshcore_poll_success` | `target` | Exporter internal: 1 on successful poll, 0 on failed poll |
+| `meshcore_poll_duration_seconds` | `target` | Exporter internal: end-to-end poll cycle duration |
+| `meshcore_poll_timestamp_seconds` | `target` | Exporter internal: timestamp of last successful poll |
+| `meshcore_telemetry_snapshots_total` | `target` | SQLite row count in `telemetry_snapshots` for target |
+| `meshcore_battery_voltage_volts` | `target` | `req_status.bat` (mV) converted to volts |
+| `meshcore_battery_percent` | `target` | Estimated from `meshcore_battery_voltage_volts` using 1S LiPo curve |
+| `meshcore_contacts_total` | `target` | Parsed from `contacts` output (cached between refreshes) |
+| `meshcore_neighbors_zero_hop_total` | `target` | Derived from `req_neighbours` entries (`hops==0`, or count fallback) |
+| `meshcore_neighbor_snr_db` | `target,neighbor_pubkey,neighbor_name` | `req_neighbours[].snr` |
+| `meshcore_neighbor_last_seen_seconds` | `target,neighbor_pubkey,neighbor_name` | `req_neighbours[].secs_ago` |
+| `meshcore_status_value` | `target,field` | Every numeric field from `req_status` (`bat` exported as `bat_mv`) |
+
+## Exported Metrics (Examples)
+
+These are example Prometheus exposition lines you should see on `/metrics`:
+
+```text
+meshcore_poll_success{target="repeater01"} 1
+meshcore_poll_duration_seconds{target="repeater01"} 0.842
+meshcore_poll_timestamp_seconds{target="repeater01"} 1772246400.123
+meshcore_telemetry_snapshots_total{target="repeater01"} 189
+meshcore_battery_voltage_volts{target="repeater01"} 3.742
+meshcore_battery_percent{target="repeater01"} 23
+meshcore_contacts_total{target="repeater01"} 41
+meshcore_neighbors_zero_hop_total{target="repeater01"} 5
+meshcore_neighbor_snr_db{target="repeater01",neighbor_pubkey="028f91d9",neighbor_name="OakRelay"} -0.75
+meshcore_neighbor_last_seen_seconds{target="repeater01",neighbor_pubkey="028f91d9",neighbor_name="OakRelay"} 799
+meshcore_status_value{target="repeater01",field="bat_mv"} 3742
+meshcore_status_value{target="repeater01",field="uptime"} 259345
+meshcore_status_value{target="repeater01",field="last_snr"} 13
+```
+
+Neighbor naming:
+- `neighbor_name` is resolved by matching neighbour pubkey prefixes to the cached `contacts` list.
+- If no match is found, `neighbor_name` falls back to `neighbor_pubkey`.
+
+## Logging and Troubleshooting
+
+- MeshCore CLI log lines (`LEVEL:logger:message`) are forwarded to exporter logs.
+- `--debug-meshcli` logs raw stdout/stderr and timings for each command.
+- `contacts` timeout warning means the subprocess hit `MESHCORE_CONTACTS_TIMEOUT_SECONDS`.
+- If `req_status` returns an error payload (for example `{"error":"Getting data"}`), exporter retries once after `MESHCORE_STATUS_ERROR_RETRY_SECONDS`.
 
 ## Local SQLite schema
 
-- `telemetry_snapshots`: one row per poll with raw payload JSON
-- `telemetry_values`: flattened numeric values tied to each snapshot
+- `telemetry_snapshots`: one row per poll, includes raw status payload JSON
+- `telemetry_values`: flattened numeric values per snapshot
 
 ## Test
 

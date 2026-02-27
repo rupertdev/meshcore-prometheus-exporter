@@ -9,7 +9,7 @@ User=meshcore-exporter
 Group=meshcore-exporter
 EnvironmentFile=/etc/meshcore-prom-exporter/meshcore-prom-exporter.env
 WorkingDirectory=/var/lib/meshcore-prom-exporter
-ExecStart=/usr/local/bin/meshcore-prom-exporter
+ExecStart=/opt/meshcore-prom-exporter/meshcore-prom-exporter
 Restart=on-failure
 RestartSec=5
 

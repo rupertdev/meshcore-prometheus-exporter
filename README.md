@@ -11,13 +11,56 @@ The exporter:
 
 - Python 3.10+
 - `meshcore-cli` (`meshcli`) installed and reachable
+- Linux host with `systemd` (for the recommended install path)
 
-## Install (local)
+## Install (Recommended)
+
+Use the provided helper script. This is the primary install path for running the exporter as a systemd service.
+
+From the repository root:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+bash scripts/build_and_install_systemd.sh
+```
+
+The script will:
+- build the executable with PyInstaller,
+- install the binary to `/opt/meshcore-prom-exporter/meshcore-prom-exporter`,
+- install the service file to `/etc/systemd/system/meshcore-prom-exporter.service`,
+- copy config template to `/etc/meshcore-prom-exporter/meshcore-prom-exporter.env` (if missing),
+- run `systemctl daemon-reload`.
+
+Then edit config and start service:
+
+```bash
+sudoedit /etc/meshcore-prom-exporter/meshcore-prom-exporter.env
+sudo systemctl enable --now meshcore-prom-exporter
+sudo systemctl status meshcore-prom-exporter
+```
+
+## Install (Local Dev)
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+## Build Executable (PyInstaller)
+
+Build a single-file executable:
+
+```bash
+pyinstaller --clean --onefile --name meshcore-prom-exporter --paths src src/meshcore_prom_exporter/__main__.py
+```
+
+Output binary:
+
+```text
+dist/meshcore-prom-exporter
 ```
 
 ## Run (local)
@@ -100,12 +143,16 @@ Notes:
 Included files:
 - `deploy/systemd/meshcore-prom-exporter.service`
 - `deploy/systemd/meshcore-prom-exporter.env.example`
+- `scripts/build_and_install_systemd.sh` (build + install helper)
 
-Suggested install:
+Manual install (if not using the helper script):
 
 ```bash
 sudo useradd --system --home /var/lib/meshcore-prom-exporter --create-home meshcore-exporter
 sudo mkdir -p /etc/meshcore-prom-exporter
+sudo mkdir -p /opt/meshcore-prom-exporter
+sudo cp dist/meshcore-prom-exporter /opt/meshcore-prom-exporter/meshcore-prom-exporter
+sudo chmod 0755 /opt/meshcore-prom-exporter/meshcore-prom-exporter
 sudo cp deploy/systemd/meshcore-prom-exporter.env.example /etc/meshcore-prom-exporter/meshcore-prom-exporter.env
 sudo cp deploy/systemd/meshcore-prom-exporter.service /etc/systemd/system/meshcore-prom-exporter.service
 sudo systemctl daemon-reload
@@ -134,6 +181,26 @@ sudo systemctl status meshcore-prom-exporter
 | `meshcore_neighbor_snr_db` | `target,neighbor_pubkey,neighbor_name` | `req_neighbours[].snr` |
 | `meshcore_neighbor_last_seen_seconds` | `target,neighbor_pubkey,neighbor_name` | `req_neighbours[].secs_ago` |
 | `meshcore_status_value` | `target,field` | Every numeric field from `req_status` (`bat` exported as `bat_mv`) |
+
+## Exported Metrics (Examples)
+
+These are example Prometheus exposition lines you should see on `/metrics`:
+
+```text
+meshcore_poll_success{target="repeater01"} 1
+meshcore_poll_duration_seconds{target="repeater01"} 0.842
+meshcore_poll_timestamp_seconds{target="repeater01"} 1772246400.123
+meshcore_telemetry_snapshots_total{target="repeater01"} 189
+meshcore_battery_voltage_volts{target="repeater01"} 3.742
+meshcore_battery_percent{target="repeater01"} 23
+meshcore_contacts_total{target="repeater01"} 41
+meshcore_neighbors_zero_hop_total{target="repeater01"} 5
+meshcore_neighbor_snr_db{target="repeater01",neighbor_pubkey="028f91d9",neighbor_name="OakRelay"} -0.75
+meshcore_neighbor_last_seen_seconds{target="repeater01",neighbor_pubkey="028f91d9",neighbor_name="OakRelay"} 799
+meshcore_status_value{target="repeater01",field="bat_mv"} 3742
+meshcore_status_value{target="repeater01",field="uptime"} 259345
+meshcore_status_value{target="repeater01",field="last_snr"} 13
+```
 
 Neighbor naming:
 - `neighbor_name` is resolved by matching neighbour pubkey prefixes to the cached `contacts` list.
