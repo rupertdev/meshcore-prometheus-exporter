@@ -1,0 +1,95 @@
+Metadata-Version: 2.4
+Name: meshcore-prom-exporter
+Version: 0.1.0
+Summary: Prometheus exporter for meshcore telemetry via meshcore-cli
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: prometheus-client>=0.20.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+
+# meshcore-prom-exporter
+
+Prometheus exporter for meshcore telemetry, using `meshcore-cli` as the polling backend.
+
+This first iteration:
+- invokes `meshcli -j` commands on a schedule (`req_telemetry` and `contacts`),
+- stores each poll snapshot in local SQLite,
+- exposes latest numeric telemetry values on `/metrics`.
+
+## Requirements
+
+- Python 3.10+
+- `meshcore-cli` installed and reachable as `meshcli` (or pass `--meshcli-bin`)
+
+## Install
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+## Run
+
+Example using TCP to a companion node:
+
+```bash
+meshcore-prom-exporter \
+  --target repeater01 \
+  --device-password "<repeater-password>" \
+  --meshcore-args "-t 192.168.1.10 -p 5000" \
+  --poll-interval-seconds 30 \
+  --db-path ./data/telemetry.db \
+  --listen-address 0.0.0.0 \
+  --listen-port 9108
+```
+
+Metrics endpoint:
+
+```text
+http://localhost:9108/metrics
+```
+
+## Environment variables
+
+All CLI arguments have environment equivalents:
+
+- `MESHCORE_CLI_BIN` (default: `meshcli`)
+- `MESHCORE_TARGET` (required if `--target` not set)
+- `MESHCORE_ARGS` (default: empty string)
+- `MESHCORE_TIMEOUT_SECONDS` (default: `20`)
+- `MESHCORE_DEVICE_PASSWORD` (fallback env: `MESHCORE_PASSWORD`)
+- `MESHCORE_LOGIN_TARGET` (optional, defaults to target)
+- `MESHCORE_POLL_INTERVAL_SECONDS` (default: `30`)
+- `MESHCORE_DB_PATH` (default: `./data/telemetry.db`)
+- `MESHCORE_LISTEN_ADDRESS` (default: `0.0.0.0`)
+- `MESHCORE_LISTEN_PORT` (default: `9108`)
+- `MESHCORE_LOG_LEVEL` (default: `INFO`)
+
+## Exported metrics
+
+- `meshcore_poll_success{target}`
+- `meshcore_poll_duration_seconds{target}`
+- `meshcore_poll_timestamp_seconds{target}`
+- `meshcore_telemetry_snapshots_total{target}`
+- `meshcore_telemetry_value{target,key}`
+- `meshcore_battery_voltage_volts{target}`
+- `meshcore_battery_percent{target}`
+- `meshcore_contacts_total{target}`
+- `meshcore_neighbors_zero_hop_total{target}`
+
+`meshcore_telemetry_value` includes numeric and boolean values from telemetry payloads.
+Nested values are flattened into snake_case keys (for example `battery_voltage`).
+
+## Local SQLite schema
+
+- `telemetry_snapshots`: one row per poll with raw payload JSON
+- `telemetry_values`: flattened numeric values tied to each snapshot
+
+## Test
+
+```bash
+pytest -q
+```
+

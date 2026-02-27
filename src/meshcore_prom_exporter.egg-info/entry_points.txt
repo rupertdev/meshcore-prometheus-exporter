@@ -1,0 +1,2 @@
+[console_scripts]
+meshcore-prom-exporter = meshcore_prom_exporter.main:main

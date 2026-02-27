@@ -1,0 +1,4 @@
+prometheus-client>=0.20.0
+
+[dev]
+pytest>=8.0.0

@@ -1,0 +1,17 @@
+[Unit]
+Description=MeshCore Prometheus Exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=meshcore-exporter
+Group=meshcore-exporter
+EnvironmentFile=/etc/meshcore-prom-exporter/meshcore-prom-exporter.env
+WorkingDirectory=/var/lib/meshcore-prom-exporter
+ExecStart=/usr/local/bin/meshcore-prom-exporter
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
